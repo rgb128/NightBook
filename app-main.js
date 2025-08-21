@@ -87,7 +87,6 @@ TODO:
 
 2. Favicon
 5. Normal alphabet
-9. random function
 */
 
 // A curated library of 26 vibrant, neon-style colors
