@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Character Generator</title>
+    <style>
+        /* --- Basic Styling --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            text-align: center;
+            background: #2c2c2c;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #ffffff;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        /* --- Canvas Styling --- */
+        #neonCanvas {
+            background-color: #000;
+            border-radius: 8px;
+            border: 1px solid #444;
+            max-width: 100%; /* Make it responsive */
+            height: auto;
+            margin-bottom: 1.5rem;
+        }
+
+        /* --- Controls Styling --- */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #charInput {
+            font-size: 1.5rem;
+            width: 80px;
+            padding: 10px;
+            text-align: center;
+            background: #1a1a1a;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 5px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        #charInput:focus {
+            outline: none;
+            border-color: #00aaff;
+            box-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+        }
+
+        button, .button-link {
+            font-size: 1rem;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        #generateBtn {
+            background-color: #00aaff;
+            color: white;
+        }
+
+        #generateBtn:hover {
+            background-color: #0088cc;
+        }
+
+        #downloadLink {
+            background-color: #4CAF50; /* Green */
+            color: white;
+        }
+
+        #downloadLink:hover {
+            background-color: #45a049;
+        }
+
+        /* --- NEW: Slider Controls Styling --- */
+        .slider-control {
+            display: grid;
+            grid-template-columns: 80px 1fr 50px;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+        }
+        .slider-control label {
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        .slider-control input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #444;
+            border-radius: 5px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        .slider-control input[type="range"]:hover {
+            opacity: 1;
+        }
+        .slider-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #00aaff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .slider-control input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #00aaff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .slider-control span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            background-color: #1a1a1a;
+            padding: 4px 0;
+            border-radius: 4px;
+            text-align: center;
+            width: 100%;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Neon Character Generator</h1>
+        
+        <div class="controls-grid">
+            <div class="control-group">
+                <input type="text" id="charInput" maxlength="1" value="#">
+                <button id="generateBtn">Generate</button>
+            </div>
+            
+            <!-- NEW: Slider Controls -->
+            <div class="slider-controls">
+                <div class="slider-control">
+                    <label for="translateX">Translate X</label>
+                    <input type="range" id="translateX" min="-500" max="500" value="0">
+                    <span id="translateXValue">0</span>
+                </div>
+                <div class="slider-control">
+                    <label for="translateY">Translate Y</label>
+                    <input type="range" id="translateY" min="-500" max="500" value="0">
+                    <span id="translateYValue">0</span>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="neonCanvas"></canvas>
+
+        <div>
+            <a href="#" id="downloadLink" class="button-link" download="neon-character.png">Download Image</a>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================================
+        // --- CONFIGURATION CONSTANTS (Feel free to change these) ---
+        // ==========================================================
+        const CANVAS_WIDTH = 1000;
+        const CANVAS_HEIGHT = 1000;
+        const BACKGROUND_IMAGE_URL = 'favicon-bg.png'; // Your background image
+        
+        // How much of the canvas the character should fill (e.g., 0.8 = 80%)
+        const CHARACTER_SCALE = 1; 
+
+        // Colors for the neon effect
+        // const NEON_COLOR = '#00aaff';
+        // const SHADOW_COLOR = '#00aaff';
+        const NEON_COLOR = '#808080';
+        const SHADOW_COLOR = '#808080';
+        
+        // NEW: Initial position offsets
+        const TRANSLATE_X = 0;
+        const TRANSLATE_Y = 0;
+
+        // An array defining the layers of the glow effect, from widest to narrowest.
+        // This creates a realistic falloff.
+        const NEON_GLOW_SETTINGS = [
+            { lineWidth: 15, alpha: 0.2, shadowBlur: 30 },
+            { lineWidth: 10, alpha: 0.3, shadowBlur: 20 },
+            { lineWidth: 5,  alpha: 0.4, shadowBlur: 10 },
+            { lineWidth: 3,  alpha: 1.0, shadowBlur: 5  }
+        ];
+
+        // The bright "filament" core of the neon light
+        const NEON_CORE_COLOR = '#ffffff';
+        const NEON_CORE_LINEWIDTH = 2;
+
+        // Sample font data. Replace this with your actual FONT_LETTERS_JSON data.
+        // The path data is the 'd' attribute from an <path> element in an SVG.
+        const FONT_DATA_JSON = {
+            metadata: {
+                // The original size of the canvas the SVG paths were designed on.
+                canvas_size: { width: 100, height: 100 }
+            },
+            characters: {
+                'A': "M250 50 L100 450 L150 450 L200 300 L300 300 L350 450 L400 450 L250 50 Z M220 250 L280 250 L250 150 Z",
+                'B': "M100 50 L300 50 C400 50 400 150 300 150 L100 150 Z M100 200 L350 200 C450 200 450 300 350 300 L100 300 Z M100 50 L100 450",
+                'C': "M400 100 C400 50 350 50 300 50 L150 50 C100 50 50 100 50 150 L50 350 C50 400 100 450 150 450 L300 450 C350 450 400 450 400 400",
+                "#": "M44 4 L53 4 L50 23 L74 4 L70 22 L79 23 L64 43 L73 57 L60 59 L57 74 L47 75 L51 58 L41 57 L36 75 L26 75 L30 58 L20 57 L36 36 L26 23 L39 22 L43 5 Z M47 34 L44 46 L53 46 L56 33 L47 33 Z M42 7 L42 8 Z M41 11 L41 12 Z M61 14 L60 15 Z M40 16 Z M39 20 Z M33 22 L34 22 Z M71 22 L72 22 Z M34 33 L35 34 Z M68 33 L68 34 Z M34 38 L33 39 Z M66 39 Z M65 45 L65 46 Z M62 58 Z M29 60 Z",
+                // "#": "M27.92 31.39L40.55 31.39L44.52 18.71Q44.79 17.80 45.94 17.37Q47.10 16.94 48.50 16.94L48.50 16.94Q49.62 16.94 50.81 17.18Q51.99 17.42 52.87 17.91Q53.76 18.39 54.22 19.06Q54.67 19.73 54.40 20.54L54.40 20.54L51.02 31.39L60.63 31.39L64.61 18.71Q64.88 17.80 66.03 17.37Q67.19 16.94 68.58 16.94L68.58 16.94Q69.71 16.94 70.89 17.18Q72.08 17.42 72.96 17.91Q73.85 18.39 74.30 19.06Q74.76 19.73 74.49 20.54L74.49 20.54L71.11 31.39L77.45 31.39Q78.36 31.39 79.00 31.63Q79.65 31.87 80.05 32.52Q80.45 33.16 80.64 34.34Q80.83 35.52 80.83 37.46L80.83 37.46Q80.83 39.39 80.64 40.57Q80.45 41.76 80.05 42.40Q79.65 43.04 79.00 43.26Q78.36 43.47 77.45 43.47L77.45 43.47L67.29 43.47L63.37 55.99L72.08 55.99Q72.99 55.99 73.63 56.23Q74.28 56.47 74.68 57.12Q75.08 57.76 75.27 58.94Q75.46 60.12 75.46 62.06L75.46 62.06Q75.46 63.99 75.27 65.17Q75.08 66.35 74.68 67.00Q74.28 67.64 73.63 67.86Q72.99 68.07 72.08 68.07L72.08 68.07L59.61 68.07L55.48 81.29Q55.21 82.20 54.06 82.63Q52.90 83.06 51.50 83.06L51.50 83.06Q50.38 83.06 49.19 82.82Q48.01 82.58 47.13 82.09Q46.24 81.61 45.78 80.94Q45.33 80.27 45.60 79.46L45.60 79.46L49.14 68.07L39.53 68.07L35.39 81.29Q35.12 82.20 33.97 82.63Q32.81 83.06 31.42 83.06L31.42 83.06Q30.29 83.06 29.11 82.82Q27.92 82.58 27.04 82.09Q26.15 81.61 25.70 80.94Q25.24 80.27 25.51 79.46L25.51 79.46L29.05 68.07L22.55 68.07Q21.64 68.07 21.00 67.86Q20.35 67.64 19.95 67.00Q19.55 66.35 19.36 65.17Q19.17 63.99 19.17 62.06L19.17 62.06Q19.17 60.12 19.36 58.94Q19.55 57.76 19.95 57.12Q20.35 56.47 21.00 56.23Q21.64 55.99 22.55 55.99L22.55 55.99L32.87 55.99L36.79 43.47L27.92 43.47Q27.01 43.47 26.37 43.26Q25.72 43.04 25.32 42.40Q24.92 41.76 24.73 40.57Q24.54 39.39 24.54 37.46L24.54 37.46Q24.54 35.52 24.73 34.34Q24.92 33.16 25.32 32.52Q25.72 31.87 26.37 31.63Q27.01 31.39 27.92 31.39L27.92 31.39ZM47.21 43.47L43.29 55.99L52.95 55.99L56.88 43.47L47.21 43.47Z",
+                // Add more characters here...
+            }
+        };
+
+        // ========================================
+        // --- APPLICATION LOGIC ---
+        // ========================================
+
+        // --- Get DOM Elements ---
+        const canvas = document.getElementById('neonCanvas');
+        const ctx = canvas.getContext('2d');
+        const charInput = document.getElementById('charInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // NEW: Get Slider DOM Elements
+        const translateXSlider = document.getElementById('translateX');
+        const translateYSlider = document.getElementById('translateY');
+        const translateXValue = document.getElementById('translateXValue');
+        const translateYValue = document.getElementById('translateYValue');
+
+        // --- Set Initial Values ---
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        translateXSlider.value = TRANSLATE_X;
+        translateYSlider.value = TRANSLATE_Y;
+        translateXValue.textContent = TRANSLATE_X;
+        translateYValue.textContent = TRANSLATE_Y;
+
+
+        /**
+         * The main function to draw everything on the canvas.
+         */
+        function generateImage() {
+            // Read current values from all inputs
+            const character = charInput.value.charAt(0).toUpperCase();
+            const translateX = parseInt(translateXSlider.value, 10);
+            const translateY = parseInt(translateYSlider.value, 10);
+
+            const pathData = FONT_DATA_JSON.characters[character];
+            if (!pathData) {
+                console.error(`Character "${character}" not found in font data.`);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            const path2d = new Path2D(pathData);
+            const bgImage = new Image();
+            bgImage.src = BACKGROUND_IMAGE_URL;
+
+            bgImage.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+                drawNeonPath(path2d, translateX, translateY); // Pass translate values
+                updateDownloadLink(character);
+            };
+
+            bgImage.onerror = () => {
+                console.error("Background image failed to load.");
+                ctx.fillStyle = '#111';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawNeonPath(path2d, translateX, translateY); // Pass translate values
+                updateDownloadLink(character);
+            };
+        }
+
+        /**
+         * Renders the neon effect for a given path at a specific position.
+         * @param {Path2D} path2d - The Path2D object to render.
+         * @param {number} translateX - The horizontal offset.
+         * @param {number} translateY - The vertical offset.
+         */
+        function drawNeonPath(path2d, translateX, translateY) {
+            ctx.save();
+
+            const sourceSize = FONT_DATA_JSON.metadata.canvas_size.width;
+            const desiredSize = canvas.width * CHARACTER_SCALE;
+            const scaleFactor = desiredSize / sourceSize;
+
+            // --- Center, Scale, and Translate the character ---
+            // 1. Move origin to the canvas center plus the user's offset
+            ctx.translate((canvas.width / 2) + translateX, (canvas.height / 2) + translateY);
+            // 2. Scale up
+            ctx.scale(scaleFactor, scaleFactor);
+            // 3. Move origin back by half the original size to center the drawing
+            ctx.translate(-sourceSize / 2, -sourceSize / 2);
+
+            // --- Draw glow layers ---
+            ctx.strokeStyle = NEON_COLOR;
+            ctx.shadowColor = SHADOW_COLOR;
+            NEON_GLOW_SETTINGS.forEach(setting => {
+                ctx.lineWidth = setting.lineWidth;
+                ctx.globalAlpha = setting.alpha;
+                ctx.shadowBlur = setting.shadowBlur;
+                ctx.stroke(path2d);
+            });
+
+            // --- Draw bright inner core ---
+            ctx.strokeStyle = NEON_CORE_COLOR;
+            ctx.lineWidth = NEON_CORE_LINEWIDTH;
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1.0;
+            ctx.stroke(path2d);
+
+            ctx.restore();
+        }
+
+        /**
+         * Updates the href and download attributes of the download link.
+         * @param {string} character - The character currently displayed.
+         */
+        function updateDownloadLink(character) {
+            downloadLink.href = canvas.toDataURL('image/png');
+            downloadLink.download = `neon-${character}.png`;
+        }
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', generateImage);
+        charInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') generateBtn.click();
+        });
+
+        // NEW: Event Listeners for sliders
+        translateXSlider.addEventListener('input', () => {
+            translateXValue.textContent = translateXSlider.value;
+            generateImage();
+        });
+
+        translateYSlider.addEventListener('input', () => {
+            translateYValue.textContent = translateYSlider.value;
+            generateImage();
+        });
+
+        // --- Initial Load ---
+        window.addEventListener('load', generateImage);
+
+    </script>
+
+</body>
+</html>
