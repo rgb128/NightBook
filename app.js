@@ -1,3 +1,5 @@
+'use strict';
+
 const BG_PARAMS = {
     width: 1000,
     height: 1000,
