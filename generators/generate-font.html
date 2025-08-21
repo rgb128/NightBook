@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alphabet Neon Generator & Exporter</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #1a1a1a; color: #eee;}
+        h1 { text-align: center; }
+        #controls { 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            border: 1px solid #444; 
+            border-radius: 5px; 
+            background: #2a2a2a; 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+            align-items: center; 
+            gap: 15px;
+        }
+        #controls > div { margin-bottom: 10px; }
+        #font-status { font-style: italic; color: #888; width: 100%; text-align: center; }
+        button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; background-color: #4a90e2; color: white; font-weight: bold; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        #status { width: 100%; text-align: center; color: #ffc107; height: 20px; }
+        #gallery { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 10px; }
+        #gallery canvas { border: 1px solid #444; }
+    </style>
+    <!-- Include the opentype.js library from a CDN -->
+    <script src="https://unpkg.com/opentype.js/dist/opentype.min.js"></script>
+</head>
+<body>
+
+    <h1>Alphabet Neon Generator & Exporter</h1>
+
+    <div id="controls">
+        <div>
+            <label for="font-input">1. Upload a font file (.ttf, .otf):</label><br>
+            <input type="file" id="font-input" accept=".ttf, .otf, .woff">
+            <div id="font-status">No font loaded.</div>
+        </div>
+        <div>
+            <label for="font-size-input">2. Set Font Size:</label>
+            <input type="number" id="font-size-input" value="150">
+        </div>
+        <button id="generateBtn" onclick="run()">Generate Alphabet</button>
+        <button id="exportBtn" onclick="exportJSON()">Export to JSON</button>
+        <div id="status"></div>
+    </div>
+
+    <div id="gallery"></div>
+
+<script>
+    const CHARACTERS_TO_GENERATE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?@#$%&';
+    const OUTPUT_SIZE = 100; // Size for each neon canvas
+    let currentFont = null;
+
+    const generateBtn = document.getElementById('generateBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const statusEl = document.getElementById('status');
+    const galleryEl = document.getElementById('gallery');
+
+    /** Helper to pause execution briefly to keep the UI responsive. */
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    function setButtonsDisabled(disabled) {
+        generateBtn.disabled = disabled;
+        exportBtn.disabled = disabled;
+    }
+
+    document.getElementById('font-input').addEventListener('change', function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const arrayBuffer = e.target.result;
+            const fontStatusEl = document.getElementById('font-status');
+            try {
+                currentFont = opentype.parse(arrayBuffer);
+                const fontName = currentFont.names.fontFamily.en || 'Unknown Font';
+                fontStatusEl.textContent = `Font loaded: ${fontName}`;
+                fontStatusEl.style.color = '#33dd33';
+                run();
+            } catch (err) {
+                currentFont = null;
+                fontStatusEl.textContent = `Error: ${err.message}`;
+                fontStatusEl.style.color = '#ff5555';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+    
+    /**
+     * Generates an SVG path string for a single character.
+     * @param {string} char The character to process.
+     * @param {number} fontSize The font size to use.
+     * @returns {string} The SVG path data string.
+     */
+    function generatePathForChar(char, fontSize) {
+        if (!currentFont) return "";
+
+        const path = currentFont.getPath(char, 0, 0, fontSize);
+        const bbox = path.getBoundingBox();
+        const pathWidth = bbox.x2 - bbox.x1;
+        const pathHeight = bbox.y2 - bbox.y1;
+
+        // Center the path within the target OUTPUT_SIZE
+        const centeredX = (OUTPUT_SIZE - pathWidth) / 2 - bbox.x1;
+        const centeredY = (OUTPUT_SIZE + pathHeight) / 2 - bbox.y2;
+
+        const centeredPath = currentFont.getPath(char, centeredX, centeredY, fontSize);
+        return centeredPath.toPathData();
+    }
+
+    /**
+     * Main function to generate and display the entire character set.
+     */
+    async function run() {
+        if (!currentFont) {
+            alert("Please load a font file first.");
+            return;
+        }
+        setButtonsDisabled(true);
+        galleryEl.innerHTML = '';
+        const fontSize = parseInt(document.getElementById('font-size-input').value, 10);
+
+        for (const char of CHARACTERS_TO_GENERATE) {
+            statusEl.textContent = `Generating '${char}'...`;
+            await sleep(1); // Give the browser a moment to update the UI
+            
+            const pathData = generatePathForChar(char, fontSize);
+            if (pathData) {
+                drawNeonEffect(pathData);
+            }
+        }
+        statusEl.textContent = 'Done!';
+        setButtonsDisabled(false);
+    }
+
+    /**
+     * Generates path data for all characters and logs a JSON object to the console.
+     */
+    async function exportJSON() {
+        if (!currentFont) {
+            alert("Please load a font file first.");
+            return;
+        }
+        setButtonsDisabled(true);
+        statusEl.textContent = 'Preparing JSON export...';
+        
+        const fontSize = parseInt(document.getElementById('font-size-input').value, 10);
+        const fontName = currentFont.names.fontFamily.en || 'Unknown Font';
+
+        const output = {
+            metadata: {
+                font: `${fontName} (rendered at ${fontSize}px)`,
+                canvas_size: { width: OUTPUT_SIZE, height: OUTPUT_SIZE },
+                generated_on: new Date().toISOString()
+            },
+            characters: {}
+        };
+
+        for (const char of CHARACTERS_TO_GENERATE) {
+            statusEl.textContent = `Exporting path for '${char}'...`;
+            await sleep(1);
+
+            const pathData = generatePathForChar(char, fontSize);
+            output.characters[char] = pathData || "Error: Path could not be generated.";
+        }
+
+        console.log(JSON.stringify(output, null, 2));
+        statusEl.textContent = 'JSON exported to console!';
+        setButtonsDisabled(false);
+    }
+
+    /**
+     * Renders a neon glow effect on a canvas and appends it to the gallery.
+     * @param {string} svgPathData The 'd' attribute string from an SVG path.
+     */
+    function drawNeonEffect(svgPathData) {
+        const canvas = document.createElement('canvas');
+        canvas.width = OUTPUT_SIZE;
+        canvas.height = OUTPUT_SIZE;
+        galleryEl.appendChild(canvas);
+        
+        const ctx = canvas.getContext('2d');
+        const path2d = new Path2D(svgPathData);
+        
+        ctx.fillStyle = '#0a0a14';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const neonColor = '#ff00ff';
+        
+        // Layer 1: Wide, diffuse outer glow
+        ctx.strokeStyle = neonColor;
+        ctx.lineWidth = 5;
+        ctx.globalAlpha = 0.2;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = neonColor;
+        ctx.stroke(path2d);
+
+        // Layer 2: Medium main glow
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.4;
+        ctx.shadowBlur = 8;
+        ctx.stroke(path2d);
+
+        // Layer 3: Sharp inner color
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 1.0;
+        ctx.shadowBlur = 3;
+        ctx.stroke(path2d);
+        
+        // Layer 4: Bright white core
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+        ctx.stroke(path2d);
+    }
+
+</script>
+
+</body>
+</html>
