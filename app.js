@@ -14,6 +14,7 @@ const BG_PARAMS = {
     letterTransformYMin: 0.8,
     letterTransformYMax: 1.2,
     drawBorder: false,
+    letterBorder: '1px solid black',
 };
 
 // Since we can't read a local file from the browser, we embed the JSON data here.
@@ -130,6 +131,12 @@ function generateBackground() {
     // Get the original canvas size from metadata to center the paths correctly
     const sourceCanvasSize = PIXEL_LETTERS_JSON.metadata.canvas_size;
 
+    // Parse border parameters once before the loop ---
+    const borderParts = (BG_PARAMS.letterBorder || '').split(' ');
+    const strokeWidth = borderParts.length > 0 ? parseInt(borderParts[0], 10) : 0;
+    const strokeColor = borderParts.length > 2 ? borderParts[2] : '#000000';
+
+
     // 2. Add lettersCount letters
     for (let i = 0; i < BG_PARAMS.lettersCount; i++) {
         // --- Generate random properties for each letter ---
@@ -174,6 +181,14 @@ function generateBackground() {
                 
                 // Draw the path
                 ctx.fill(path2d);
+
+                // Draw the stroke if width is greater than 0 ---
+                if (strokeWidth > 0) {
+                    ctx.strokeStyle = strokeColor;
+                    // Note: Line width is also affected by scaling, which is usually the desired effect.
+                    ctx.lineWidth = strokeWidth; 
+                    ctx.stroke(path2d);
+                }
 
                 ctx.restore();
             }
