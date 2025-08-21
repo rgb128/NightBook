@@ -141,7 +141,6 @@ class TimeMarquee {
     LETTER_HEIGHT = 500;
     CHARACTER_BUFFER = 10;
     MANAGER_INTERVAL_MS = 1000;
-    // --- NEW: Animation duration for calculating random delay ---
     ANIMATION_DURATION_S = 2;
 
     // --- STATE ---
@@ -151,18 +150,29 @@ class TimeMarquee {
     pixelsPerMicrosecond = 0;
     activeCharacters = new Map();
     isInitialized = false;
+    alphabet = []; // <-- NEW: To hold available characters
 
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         this.pixelsPerMicrosecond = (this.LETTERS_PER_SECOND * this.LETTER_WIDTH) / 1000000;
+
+        // --- NEW: Dynamically build the alphabet from the font data ---
+        if (typeof FONT_LETTERS_JSON !== 'undefined' && FONT_LETTERS_JSON.characters) {
+            this.alphabet = Object.keys(FONT_LETTERS_JSON.characters);
+        }
     }
 
     async init() {
         if (this.isInitialized || !this.container) return;
+        if (this.alphabet.length === 0) {
+            console.error("Font data (FONT_LETTERS_JSON) not found or is empty.");
+            document.getElementById('info').textContent = 'Error: Font data is missing.';
+            return;
+        }
         try {
             await this.syncTime();
             this.isInitialized = true;
-            document.getElementById('info').textContent = 'Time synchronized. Animation running.';
+            document.getElementById('info').textContent = 'Made by #808080';
             this.update();
             this.manageCharacters();
             setInterval(() => this.manageCharacters(), this.MANAGER_INTERVAL_MS);
@@ -187,14 +197,56 @@ class TimeMarquee {
         return (this.browserEpochMs * 1000) + (performance.now() * 1000) + this.timeOffsetUs;
     }
 
-    timeToIndex(timeUs) { return Math.floor(timeUs / 1000000 / 10); }
-    indexToChar(index) { return String(Math.abs(index) % 10); }
+    // --- REFINED LOGIC ---
+
+    /**
+     * A simple, deterministic pseudo-random number generator (PRNG).
+     * It uses bitwise operations to hash an integer seed into a scrambled,
+     * unpredictable, but repeatable integer output. This ensures that the same
+     * character index always produces the same "random" result.
+     * @param {number} seed - The integer to hash (our character index).
+     * @returns {number} A positive pseudo-random integer.
+     */
+    seededRandom(seed) {
+        let x = seed;
+        x = ((x >> 16) ^ x) * 0x45d9f3b;
+        x = ((x >> 16) ^ x) * 0x45d9f3b;
+        x = (x >> 16) ^ x;
+        return Math.abs(x);
+    }
+
+    /**
+     * Calculates the unique index for a character based on the global time.
+     * This index serves as the "slot" for a character in the infinite marquee.
+     * @param {number} timeUs - The current global time in microseconds.
+     * @returns {number} The character index.
+     */
+    timeToIndex(timeUs) {
+        const timeInSeconds = timeUs / 1000000;
+        return Math.floor(timeInSeconds * this.LETTERS_PER_SECOND);
+    }
+
+    /**
+     * Determines which character to display for a given index.
+     * It uses the seeded PRNG to pick a character from the full alphabet,
+     * ensuring the result is the same on all clients for the same index.
+     * @param {number} index - The character index calculated by timeToIndex.
+     * @returns {string} The character to be displayed.
+     */
+    indexToChar(index) {
+        if (this.alphabet.length === 0) return '?';
+        const randomNumber = this.seededRandom(index);
+        const alphabetIndex = randomNumber % this.alphabet.length;
+        return this.alphabet[alphabetIndex];
+    }
     
+    // --- UNCHANGED FUNCTIONS ---
+
     update = () => {
         if (!this.isInitialized) return;
         const nowUs = this.getCurrentGlobalTimeUs();
         const totalScrollX = nowUs * this.pixelsPerMicrosecond;
-        const leadingIndex = Math.floor(totalScrollX / this.LETTER_WIDTH);
+        const leadingIndex = this.timeToIndex(nowUs); // Use the refined function
         const scrollOffset = -(totalScrollX % this.LETTER_WIDTH);
 
         for (const [index, charObj] of this.activeCharacters.entries()) {
@@ -209,8 +261,7 @@ class TimeMarquee {
         if (!this.isInitialized) return;
         const screenWidth = window.innerWidth;
         const nowUs = this.getCurrentGlobalTimeUs();
-        const totalScrollX = nowUs * this.pixelsPerMicrosecond;
-        const leadingIndex = Math.floor(totalScrollX / this.LETTER_WIDTH);
+        const leadingIndex = this.timeToIndex(nowUs); // Use the refined function
         const numVisible = Math.ceil(screenWidth / this.LETTER_WIDTH);
         const firstIndexToRender = leadingIndex - this.CHARACTER_BUFFER;
         const lastIndexToRender = leadingIndex + numVisible + this.CHARACTER_BUFFER;
@@ -224,7 +275,7 @@ class TimeMarquee {
         
         for (let i = firstIndexToRender; i <= lastIndexToRender; i++) {
             if (!this.activeCharacters.has(i)) {
-                const char = this.indexToChar(i);
+                const char = this.indexToChar(i); // Use the refined function
                 const el = this.createLetterElement(char);
                 this.container.appendChild(el);
                 this.activeCharacters.set(i, { element: el, char: char });
@@ -232,9 +283,6 @@ class TimeMarquee {
         }
     }
 
-    /**
-     * --- MODIFIED to use random colors and set a random animation delay ---
-     */
     createLetterElement(char) {
         const pathData = FONT_LETTERS_JSON.characters[char];
         if (!pathData) return document.createElement('div');
@@ -243,8 +291,6 @@ class TimeMarquee {
         canvas.width = this.LETTER_WIDTH;
         canvas.height = this.LETTER_HEIGHT;
         canvas.className = 'letter-canvas';
-
-        // --- NEW: Set a random, negative animation delay to desynchronize the flicker ---
         canvas.style.animationDelay = `-${Math.random() * this.ANIMATION_DURATION_S}s`;
         
         const ctx = canvas.getContext('2d');
@@ -256,7 +302,6 @@ class TimeMarquee {
         ctx.scale(scale, scale);
         ctx.translate(-sourceSize / 2, -sourceSize / 2);
         
-        // --- NEW: Pick a random color from our library ---
         const neonColor = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
         
         ctx.strokeStyle = neonColor;
