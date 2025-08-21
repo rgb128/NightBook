@@ -1,12 +1,12 @@
 const BG_PARAMS = {
     width: 1000,
     height: 1000,
-    lettersCount: 40,
+    lettersCount: 50,
     backgroundColor: '#000000',
     letterColorMin: 0x10, // Not pure black to be visible
-    letterColorMax: 0x50, // Not too bright
-    letterSizeMin: 100,
-    letterSizeMax: 200,
+    letterColorMax: 0x20, // Not too bright
+    letterSizeMin: 50,
+    letterSizeMax: 500,
     letterRotateMinDeg: -90,
     letterRotateMaxDeg: 90,
     letterTransformXMin: 0.5,
