@@ -13,7 +13,7 @@ body {
     background-image: url('tmp-bg.jpg');
     background-size: auto 100vh;
     background-repeat: repeat-x;
-    animation: slideLeft 30s linear infinite;
+    animation: slideLeft 1s linear infinite;
 }
 
 @keyframes slideLeft {
@@ -21,6 +21,18 @@ body {
         background-position: 0 0;
     }
     to {
-        background-position: -1000px 0;
+        /*
+         * CRITICAL FIX: The 'to' position must be the calculated width of your image.
+         * The formula is: -(ImageAspectRatio * 100)vh
+         *
+         * EXAMPLE: If your image is 2000px wide and 1000px tall:
+         * Aspect Ratio = 2000 / 1000 = 2
+         * Value = -(2 * 100)vh = -200vh
+         *
+         * Replace -200vh below with the calculated value for YOUR image.
+        */
+        background-position: -100vh 0;
     }
 }
+
+
