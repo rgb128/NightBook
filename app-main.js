@@ -84,21 +84,65 @@ const FONT_LETTERS_JSON = {
 
 /*
 TODO:
-1. Not Amster time
+
 2. Favicon
-3. Neon animations
-4. Adjust speed
 5. Normal alphabet
+9. random function
 */
+
+// A curated library of 26 vibrant, neon-style colors
+const NEON_COLORS = [
+    // Pinks & Magentas
+    '#FF00FF', // Magenta (Electric Pink)
+    '#FF1493', // Deep Pink
+    '#F433FF', // Bright Purple-Pink
+    '#FF69B4', // Hot Pink
+
+    // Reds & Oranges
+    '#FF0000', // Pure Red
+    '#FF4500', // Orange-Red
+    '#FF5F1F', // Bright Orange
+    '#FF9933', // Neon Orange
+
+    // Yellows
+    '#FFFF00', // Pure Yellow
+    '#F8F32B', // Lemon Yellow
+    '#FFD700', // Gold (glows nicely)
+
+    // Greens
+    '#00FF00', // Lime Green
+    '#39FF14', // Classic Neon Green
+    '#7FFF00', // Chartreuse
+    '#ADFF2F', // Green-Yellow
+
+    // Cyans & Teals
+    '#00FFFF', // Cyan / Aqua
+    '#00E5EE', // Bright Cyan
+    '#40E0D0', // Turquoise
+    
+    // Blues
+    '#007BFF', // Bright Blue
+    '#1E90FF', // Dodger Blue
+    '#4169E1', // Royal Blue
+    '#0000FF', // Pure Blue
+
+    // Violets & Purples
+    '#8A2BE2', // Blue-Violet
+    '#9400D3', // Dark Violet (glows with a deep color)
+    '#BA55D3', // Medium Orchid
+    '#DA70D6', // Orchid
+];
 
 class TimeMarquee {
     // --- CONFIGURATION ---
-    API_URL = 'https://www.timeapi.io/api/time/current/zone?timeZone=Europe%2FAmsterdam';
+    API_URL = 'https://timeapi.io/api/time/current/zone?timeZone=Etc%2FUniversal';
     LETTERS_PER_SECOND = 1;
-    LETTER_WIDTH = 100;
-    LETTER_HEIGHT = 100;
-    CHARACTER_BUFFER = 5;
+    LETTER_WIDTH = 500;
+    LETTER_HEIGHT = 500;
+    CHARACTER_BUFFER = 10;
     MANAGER_INTERVAL_MS = 1000;
+    // --- NEW: Animation duration for calculating random delay ---
+    ANIMATION_DURATION_S = 2;
 
     // --- STATE ---
     container = null;
@@ -118,9 +162,7 @@ class TimeMarquee {
         try {
             await this.syncTime();
             this.isInitialized = true;
-            
             document.getElementById('info').textContent = 'Time synchronized. Animation running.';
-
             this.update();
             this.manageCharacters();
             setInterval(() => this.manageCharacters(), this.MANAGER_INTERVAL_MS);
@@ -134,13 +176,10 @@ class TimeMarquee {
         const response = await fetch(this.API_URL);
         if (!response.ok) throw new Error(`Time API failed: ${response.status}`);
         const data = await response.json();
-        
         const browserPerformanceNowUs = performance.now() * 1000;
         this.browserEpochMs = Date.now();
-
         const [main, fraction] = data.dateTime.split('.');
         const serverTimeUs = (new Date(main + 'Z').getTime() * 1000) + parseInt((fraction || '0').slice(0, 6).padEnd(6, '0'));
-        
         this.timeOffsetUs = serverTimeUs - ((this.browserEpochMs * 1000) + browserPerformanceNowUs);
     }
 
@@ -151,49 +190,31 @@ class TimeMarquee {
     timeToIndex(timeUs) { return Math.floor(timeUs / 1000000 / 10); }
     indexToChar(index) { return String(Math.abs(index) % 10); }
     
-    /**
-     * --- CORRECTED ANIMATION LOGIC ---
-     */
     update = () => {
         if (!this.isInitialized) return;
-        
         const nowUs = this.getCurrentGlobalTimeUs();
         const totalScrollX = nowUs * this.pixelsPerMicrosecond;
-
-        // This is the index of the character that should be at or just left of the 0-coordinate
         const leadingIndex = Math.floor(totalScrollX / this.LETTER_WIDTH);
-        
-        // This is the small offset (0 to -LETTER_WIDTH) for smooth scrolling
         const scrollOffset = -(totalScrollX % this.LETTER_WIDTH);
 
         for (const [index, charObj] of this.activeCharacters.entries()) {
-            // Calculate position relative to the current leading character
             const basePosition = (index - leadingIndex) * this.LETTER_WIDTH;
             const finalPosition = basePosition + scrollOffset;
-            // Apply the final, small, and correct translateX value
             charObj.element.style.transform = `translateY(-50%) translateX(${finalPosition}px)`;
         }
-
         requestAnimationFrame(this.update);
     }
 
-    /**
-     * --- CORRECTED CHARACTER MANAGEMENT LOGIC ---
-     */
     manageCharacters() {
         if (!this.isInitialized) return;
-        
         const screenWidth = window.innerWidth;
         const nowUs = this.getCurrentGlobalTimeUs();
         const totalScrollX = nowUs * this.pixelsPerMicrosecond;
-        
         const leadingIndex = Math.floor(totalScrollX / this.LETTER_WIDTH);
         const numVisible = Math.ceil(screenWidth / this.LETTER_WIDTH);
-
         const firstIndexToRender = leadingIndex - this.CHARACTER_BUFFER;
         const lastIndexToRender = leadingIndex + numVisible + this.CHARACTER_BUFFER;
         
-        // Remove characters that are no longer in the render window
         for (const index of this.activeCharacters.keys()) {
             if (index < firstIndexToRender || index > lastIndexToRender) {
                 this.activeCharacters.get(index).element.remove();
@@ -201,7 +222,6 @@ class TimeMarquee {
             }
         }
         
-        // Add new characters that have entered the render window
         for (let i = firstIndexToRender; i <= lastIndexToRender; i++) {
             if (!this.activeCharacters.has(i)) {
                 const char = this.indexToChar(i);
@@ -212,6 +232,9 @@ class TimeMarquee {
         }
     }
 
+    /**
+     * --- MODIFIED to use random colors and set a random animation delay ---
+     */
     createLetterElement(char) {
         const pathData = FONT_LETTERS_JSON.characters[char];
         if (!pathData) return document.createElement('div');
@@ -220,6 +243,9 @@ class TimeMarquee {
         canvas.width = this.LETTER_WIDTH;
         canvas.height = this.LETTER_HEIGHT;
         canvas.className = 'letter-canvas';
+
+        // --- NEW: Set a random, negative animation delay to desynchronize the flicker ---
+        canvas.style.animationDelay = `-${Math.random() * this.ANIMATION_DURATION_S}s`;
         
         const ctx = canvas.getContext('2d');
         const path2d = new Path2D(pathData);
@@ -229,11 +255,14 @@ class TimeMarquee {
         const scale = this.LETTER_WIDTH / sourceSize;
         ctx.scale(scale, scale);
         ctx.translate(-sourceSize / 2, -sourceSize / 2);
-
-        const neonColor = '#00ffff';
-        ctx.strokeStyle = neonColor;
         
-        ctx.lineWidth = 7; ctx.globalAlpha = 0.2; ctx.shadowBlur = 15; ctx.shadowColor = neonColor; ctx.stroke(path2d);
+        // --- NEW: Pick a random color from our library ---
+        const neonColor = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+        
+        ctx.strokeStyle = neonColor;
+        ctx.shadowColor = neonColor;
+        
+        ctx.lineWidth = 7; ctx.globalAlpha = 0.2; ctx.shadowBlur = 15; ctx.stroke(path2d);
         ctx.lineWidth = 4; ctx.globalAlpha = 0.4; ctx.shadowBlur = 10; ctx.stroke(path2d);
         ctx.lineWidth = 2; ctx.globalAlpha = 1.0; ctx.shadowBlur = 5; ctx.stroke(path2d);
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.shadowBlur = 0; ctx.stroke(path2d);
@@ -245,4 +274,3 @@ class TimeMarquee {
 // --- KICK OFF THE SCRIPT ---
 const marquee = new TimeMarquee('marquee-container');
 marquee.init();
-
