@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alphabet Path Generator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #1a1a1a;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h3 { text-align: center; }
+        #controls {
+            margin: 0 auto 20px auto;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background: #2a2a2a;
+            max-width: 800px;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #4a90e2;
+            color: white;
+            font-weight: bold;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #status {
+            width: 100%;
+            text-align: center;
+            color: #ffc107;
+            height: 20px;
+        }
+        #gallery {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px;
+        }
+        .letter-container {
+            background-color: #2b2b2b;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Alphabet Path Generator</h1>
+    <div id="controls">
+        <div>
+            <label for="fontInput">Font:</label>
+            <input type="text" id="fontInput" value="bold 80px sans-serif">
+        </div>
+        <div>
+            <label for="smoothingInput">Smoothing:</label>
+            <input type="number" id="smoothingInput" value="1.2" step="0.1">
+        </div>
+        <div>
+            <label for="colorInput">Fill Color:</label>
+            <input type="color" id="colorInput" value="#00ffff">
+        </div>
+        <button id="generateBtn" onclick="run()">Generate Alphabet</button>
+        <button id="exportBtn" onclick="exportJSON()">Export to JSON</button>
+        <div id="status"></div>
+    </div>
+    
+    <div id="gallery"></div>
+
+
+<script>
+    // ==================================================================================
+    // CONFIGURATION CONSTANTS
+    // ==================================================================================
+    const CANVAS_WIDTH = 100;
+    const CANVAS_HEIGHT = 100;
+    const ALPHA_THRESHOLD = 128;
+    const CHARACTERS_TO_GENERATE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?@#$%&';
+    const PIECE_DARKER_COEFFICIENT = 1.4;
+    let SMOOTHING_TOLERANCE = 1.2;
+
+    // ==================================================================================
+    // UTILITY FUNCTIONS
+    // ==================================================================================
+    function darkenHexColor(hexColor) {
+        let hex = hexColor.startsWith('#') ? hexColor.slice(1) : hexColor;
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        if (hex.length !== 6) return hexColor;
+        const bigint = parseInt(hex, 16);
+        let r = Math.floor(((bigint >> 16) & 255) / PIECE_DARKER_COEFFICIENT);
+        let g = Math.floor(((bigint >> 8) & 255) / PIECE_DARKER_COEFFICIENT);
+        let b = Math.floor((bigint & 255) / PIECE_DARKER_COEFFICIENT);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    // ==================================================================================
+    // CORE PATH GENERATION LOGIC
+    // ==================================================================================
+    
+    /**
+     * --- FIX: This function is now rewritten to handle disjoint shapes like 'i' and 'j'. ---
+     * It repeatedly finds the next available shape in the pixel matrix, traces it
+     * (including holes), erases it, and then searches again until no pixels are left.
+     */
+    function generateLetterOutline(letter, font) {
+        const originalMatrix = getPixelMatrix(getContextWithLetter(letter, font));
+        const allCharacterPaths = []; // Will hold paths for ALL disjoint parts of the letter
+
+        while (true) {
+            const startPoint = findStartPoint(originalMatrix);
+            // If no more starting points are found, we have traced all parts of the letter.
+            if (!startPoint) {
+                break;
+            }
+
+            // Trace the boundary of the shape we just found.
+            const outerPath = simplifyPath(traceBoundary(originalMatrix, startPoint));
+            
+            // --- Hole detection for this specific shape ---
+            const filledMaskMatrix = createFilledMask(outerPath);
+            const holeMatrix = new Array(CANVAS_HEIGHT).fill(0).map(() => new Array(CANVAS_WIDTH).fill(0));
+            for (let y = 0; y < CANVAS_HEIGHT; y++) {
+                for (let x = 0; x < CANVAS_WIDTH; x++) {
+                    if (filledMaskMatrix[y][x] === 1 && originalMatrix[y][x] === 0) {
+                        holeMatrix[y][x] = 1;
+                    }
+                }
+            }
+
+            const thisShapePaths = [outerPath];
+            let holeStartPoint;
+            while (holeStartPoint = findStartPoint(holeMatrix)) {
+                const innerPath = simplifyPath(traceBoundary(holeMatrix, holeStartPoint));
+                thisShapePaths.push(innerPath);
+                floodFill(holeMatrix, holeStartPoint, 0); // Erase hole to find next one
+            }
+            
+            // Add all paths for this part (e.g., the 'i' stem and its holes) to the master list
+            allCharacterPaths.push(...thisShapePaths);
+
+            // **CRUCIAL FIX**: Erase the entire shape we just processed from the main matrix.
+            // This allows the next iteration of the loop to find the next disjoint shape (e.g., the dot of the 'i').
+            floodFill(originalMatrix, startPoint, 0);
+        }
+
+        return convertPathsToSVGString(allCharacterPaths);
+    }
+    // ... Other core helper functions remain the same ...
+    function simplifyPath(path) { const collinearRemoved = removeCollinearPoints(path); return ramerDouglasPeucker(collinearRemoved, SMOOTHING_TOLERANCE); }
+    function removeCollinearPoints(path) { if (path.length < 3) return path; const newPath = [path[0]]; for (let i = 1; i < path.length - 1; i++) { const p1 = newPath[newPath.length - 1]; const p2 = path[i]; const p3 = path[i+1]; const crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x); if (crossProduct !== 0) { newPath.push(p2); } } newPath.push(path[path.length - 1]); return newPath; }
+    function ramerDouglasPeucker(points, epsilon) { if (points.length < 3) return points; let dmax = 0; let index = 0; const end = points.length - 1; for (let i = 1; i < end; i++) { const d = perpendicularDistance(points[i], points[0], points[end]); if (d > dmax) { index = i; dmax = d; } } if (dmax > epsilon) { const recResults1 = ramerDouglasPeucker(points.slice(0, index + 1), epsilon); const recResults2 = ramerDouglasPeucker(points.slice(index, points.length), epsilon); return recResults1.slice(0, recResults1.length - 1).concat(recResults2); } else { return [points[0], points[end]]; } }
+    function perpendicularDistance(point, lineStart, lineEnd) { let dx = lineEnd.x - lineStart.x; let dy = lineEnd.y - lineStart.y; if (dx === 0 && dy === 0) { dx = point.x - lineStart.x; dy = point.y - lineStart.y; return Math.sqrt(dx * dx + dy * dy); } const t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (dx * dx + dy * dy); const closestPoint = { x: lineStart.x + t * dx, y: lineStart.y + t * dy }; dx = point.x - closestPoint.x; dy = point.y - closestPoint.y; return Math.sqrt(dx * dx + dy * dy); }
+    function getContextWithLetter(letter, font) { const canvas = document.createElement('canvas'); canvas.width = CANVAS_WIDTH; canvas.height = CANVAS_HEIGHT; const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.font = font; ctx.fillStyle = 'black'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, canvas.width / 2, canvas.height / 2); return ctx; }
+    function getPixelMatrix(ctx) { const imageData = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); const matrix = []; for (let y = 0; y < CANVAS_HEIGHT; y++) { matrix[y] = []; for (let x = 0; x < CANVAS_WIDTH; x++) { const alpha = imageData.data[(y * CANVAS_WIDTH + x) * 4 + 3]; matrix[y][x] = alpha > ALPHA_THRESHOLD ? 1 : 0; } } return matrix; }
+    function createFilledMask(path) { const ctx = document.createElement('canvas').getContext('2d'); ctx.canvas.width = CANVAS_WIDTH; ctx.canvas.height = CANVAS_HEIGHT; ctx.beginPath(); if (path.length > 0) { ctx.moveTo(path[0].x, path[0].y); for (let i = 1; i < path.length; i++) { ctx.lineTo(path[i].x, path[i].y); } } ctx.closePath(); ctx.fill(); return getPixelMatrix(ctx); }
+    function findStartPoint(matrix) { for (let y = 0; y < matrix.length; y++) { for (let x = 0; x < matrix[y].length; x++) { if (matrix[y][x] === 1) return { x, y }; } } return null; }
+    function traceBoundary(matrix, startPoint) { const path = []; let currentPoint = { ...startPoint }; const neighbors = [ { dx: -1, dy: 0 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 1 } ]; let dir = 4; do { path.push({ x: currentPoint.x, y: currentPoint.y }); let foundNext = false; for (let i = 0; i < 8; i++) { const checkDir = (dir + i) % 8; const nextPoint = { x: currentPoint.x + neighbors[checkDir].dx, y: currentPoint.y + neighbors[checkDir].dy }; if (nextPoint.x >= 0 && nextPoint.x < CANVAS_WIDTH && nextPoint.y >= 0 && nextPoint.y < CANVAS_HEIGHT && matrix[nextPoint.y][nextPoint.x] === 1) { currentPoint = nextPoint; dir = (checkDir + 5) % 8; foundNext = true; break; } } if (!foundNext) break; } while (currentPoint.x !== startPoint.x || currentPoint.y !== startPoint.y); return path; }
+    function floodFill(matrix, startPoint, fillValue) { const originalValue = matrix[startPoint.y][startPoint.x]; if (originalValue === fillValue) return; const stack = [startPoint]; while (stack.length > 0) { const { x, y } = stack.pop(); if (x < 0 || x >= CANVAS_WIDTH || y < 0 || y >= CANVAS_HEIGHT || matrix[y][x] !== originalValue) continue; matrix[y][x] = fillValue; stack.push({ x: x + 1, y: y }); stack.push({ x: x - 1, y: y }); stack.push({ x: x, y: y + 1 }); stack.push({ x: x, y: y - 1 }); } }
+    function calculateSignedArea(path) { let area = 0; for (let i = 0; i < path.length; i++) { area += (path[i].x * path[(i + 1) % path.length].y) - (path[(i + 1) % path.length].x * path[i].y); } return area / 2; }
+    function convertPathsToSVGString(paths) { if (paths.length === 0) return ""; const sortedPaths = paths.sort((a, b) => Math.abs(calculateSignedArea(b)) - Math.abs(calculateSignedArea(a))); let svgString = ""; for (let i = 0; i < sortedPaths.length; i++) { let path = sortedPaths[i]; const area = calculateSignedArea(path); if (i === 0 && area < 0) path.reverse(); else if (i > 0 && area > 0) path.reverse(); svgString += "M" + path.map(p => `${p.x} ${p.y}`).join(" L") + " Z "; } return svgString.trim(); }
+    
+    // ==================================================================================
+    // UI AND APPLICATION LOGIC
+    // ==================================================================================
+    const generateBtn = document.getElementById('generateBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const statusEl = document.getElementById('status');
+    const galleryEl = document.getElementById('gallery');
+
+    function setButtonsDisabled(disabled) {
+        generateBtn.disabled = disabled;
+        exportBtn.disabled = disabled;
+    }
+
+    async function run() {
+        setButtonsDisabled(true);
+        galleryEl.innerHTML = '';
+        const font = document.getElementById('fontInput').value;
+        const fillColor = document.getElementById('colorInput').value;
+        const strokeColor = darkenHexColor(fillColor);
+        SMOOTHING_TOLERANCE = parseFloat(document.getElementById('smoothingInput').value);
+
+        for (const char of CHARACTERS_TO_GENERATE) {
+            statusEl.textContent = `Generating '${char}'...`;
+            await sleep(1);
+            
+            const pathData = generateLetterOutline(char, font);
+            if (pathData) {
+                const container = document.createElement('div');
+                container.className = 'letter-container';
+                // --- FIX: Removed the style attribute with the rotation from the SVG element. ---
+                container.innerHTML = `
+                    <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
+                        <path d="${pathData}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="1.5"/>
+                    </svg>
+                `;
+                galleryEl.appendChild(container);
+            }
+        }
+        statusEl.textContent = 'Done!';
+        setButtonsDisabled(false);
+    }
+
+    async function exportJSON() {
+        setButtonsDisabled(true);
+        statusEl.textContent = 'Preparing JSON export...';
+        
+        const font = document.getElementById('fontInput').value;
+        SMOOTHING_TOLERANCE = parseFloat(document.getElementById('smoothingInput').value);
+
+        const output = {
+            metadata: {
+                font: font,
+                smoothing_tolerance: SMOOTHING_TOLERANCE,
+                canvas_size: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+                generated_on: new Date().toISOString()
+            },
+            characters: {}
+        };
+
+        for (const char of CHARACTERS_TO_GENERATE) {
+            statusEl.textContent = `Exporting path for '${char}'...`;
+            await sleep(1);
+
+            const pathData = generateLetterOutline(char, font);
+            output.characters[char] = pathData || "Error: Could not generate path.";
+        }
+
+        console.log(JSON.stringify(output, null, 2));
+        statusEl.textContent = 'JSON exported to console!';
+        setButtonsDisabled(false);
+    }
+    
+    window.onload = run;
+</script>
+
+</body>
+</html>

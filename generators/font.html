@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Letter from Font File</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #1a1a1a; color: #eee;}
+        h1, h3 { text-align: center; }
+        #controls { margin-bottom: 20px; padding: 15px; border: 1px solid #444; border-radius: 5px; background: #2a2a2a; }
+        #controls > div { margin-bottom: 10px; }
+        #font-status { font-style: italic; color: #888; }
+        #outputs { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+        #outputs svg { border: 1px solid #444; background: #fff; }
+        #outputs canvas { border: 1px solid #444; }
+    </style>
+    <!-- Include the opentype.js library from a CDN -->
+    <script src="https://unpkg.com/opentype.js/dist/opentype.min.js"></script>
+</head>
+<body>
+
+    <h1>Neon Letter Generator</h1>
+
+    <div id="controls">
+        <div>
+            <label for="font-input">1. Upload a font file (.ttf, .otf):</label><br>
+            <input type="file" id="font-input" accept=".ttf, .otf, .woff">
+            <div id="font-status">No font loaded.</div>
+        </div>
+        <div>
+            <label for="letter-input">2. Enter Letter:</label>
+            <input type="text" id="letter-input" value="A" maxlength="1">
+        </div>
+        <div>
+            <label for="font-size-input">3. Set Font Size:</label>
+            <input type="number" id="font-size-input" value="150">
+        </div>
+        <button onclick="run()">Generate Outline</button>
+    </div>
+
+    <div id="outputs">
+        <div>
+            <h3>SVG Outline:</h3>
+            <div id="svg-container"></div>
+        </div>
+        <div>
+            <h3>Neon Effect:</h3>
+            <div id="neon-canvas-container"></div>
+        </div>
+    </div>
+
+<script>
+    let currentFont = null;
+    const VIEWBOX_SIZE = 200; // Used for both SVG and Canvas
+
+    document.getElementById('font-input').addEventListener('change', function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const arrayBuffer = e.target.result;
+            const fontStatusEl = document.getElementById('font-status');
+            try {
+                currentFont = opentype.parse(arrayBuffer);
+                const fontName = currentFont.names.fontFamily.en || 'Unknown';
+                fontStatusEl.textContent = `Font loaded: ${fontName}`;
+                fontStatusEl.style.color = '#33dd33';
+                run();
+            } catch (err) {
+                currentFont = null;
+                fontStatusEl.textContent = `Error: ${err.message}`;
+                fontStatusEl.style.color = '#ff5555';
+                console.error('Font parsing error:', err);
+            }
+        };
+        reader.onerror = function(err) {
+            console.error('File reading error:', err);
+            document.getElementById('font-status').textContent = 'Error reading the file.';
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    /**
+     * Main function to generate the path and trigger rendering.
+     */
+    function run() {
+        const letter = document.getElementById('letter-input').value;
+        const fontSize = parseInt(document.getElementById('font-size-input').value, 10);
+        const svgContainer = document.getElementById('svg-container');
+
+        if (!currentFont) {
+            svgContainer.innerHTML = "<p>Please load a font file first.</p>";
+            return;
+        }
+        if (!letter) {
+            svgContainer.innerHTML = "<p>Please enter a letter.</p>";
+            return;
+        }
+
+        const path = currentFont.getPath(letter[0], 0, 0, fontSize);
+        const bbox = path.getBoundingBox();
+        const pathWidth = bbox.x2 - bbox.x1;
+        const pathHeight = bbox.y2 - bbox.y1;
+        const centeredX = (VIEWBOX_SIZE - pathWidth) / 2 - bbox.x1;
+        const centeredY = (VIEWBOX_SIZE + pathHeight) / 2 - bbox.y2;
+        const centeredPath = currentFont.getPath(letter[0], centeredX, centeredY, fontSize);
+        const pathData = centeredPath.toPathData();
+
+        console.log("Generated SVG Path:", pathData);
+        
+        if (pathData) {
+            // Render the simple SVG outline
+            const svgHtml = `
+                <svg width="${VIEWBOX_SIZE}" height="${VIEWBOX_SIZE}" viewBox="0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}">
+                    <path d="${pathData}" fill="none" stroke="blue" stroke-width="1"/>
+                </svg>
+            `;
+            svgContainer.innerHTML = svgHtml;
+
+            // ** NEW: Render the neon effect on the canvas **
+            drawNeonEffect(pathData);
+
+        } else {
+            svgContainer.innerHTML = `<p>Could not generate outline for "${letter}".</p>`;
+            document.getElementById('neon-canvas-container').innerHTML = ''; // Clear canvas
+        }
+    }
+
+    /**
+     * Renders a neon glow effect on a canvas from an SVG path string.
+     * @param {string} svgPathData The 'd' attribute string from an SVG path.
+     */
+    function drawNeonEffect(svgPathData) {
+        const container = document.getElementById('neon-canvas-container');
+        container.innerHTML = ''; // Clear previous canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = VIEWBOX_SIZE;
+        canvas.height = VIEWBOX_SIZE;
+        container.appendChild(canvas);
+        
+        const ctx = canvas.getContext('2d');
+
+        // Create a Path2D object from the SVG data. This allows the canvas to draw it.
+        const path2d = new Path2D(svgPathData);
+        
+        // 1. Fill dark background
+        ctx.fillStyle = '#0a0a14';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // --- Start Layering the Glows ---
+        const neonColor = '#ff00ff'; // A vibrant magenta
+
+        // 2. Layer 1: Wide, diffuse outer glow
+        ctx.strokeStyle = neonColor;
+        ctx.lineWidth = 7;
+        ctx.globalAlpha = 0.2; // Make it faint
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = neonColor;
+        ctx.stroke(path2d);
+
+        // 3. Layer 2: Medium main glow
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 0.4;
+        ctx.shadowBlur = 10;
+        ctx.stroke(path2d);
+
+        // 4. Layer 3: Sharp inner color
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 1.0; // Full opacity
+        ctx.shadowBlur = 5;
+        ctx.stroke(path2d);
+        
+        // 5. Layer 4: Bright white core of the "tube"
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0; // No shadow for the core
+        ctx.stroke(path2d);
+    }
+
+</script>
+
+</body>
+</html>
