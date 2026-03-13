@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Text Wallpaper Generator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            background-color: #2b2b2b;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+        canvas {
+            border: 1px solid #444444;
+            background-color: #000000;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 15px;
+            align-items: center;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #555555;
+            background-color: #333333;
+            color: #ffffff;
+        }
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            padding: 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button {
+            grid-column: 1 / -1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Neon Text Wallpaper Generator</h1>
+        <div class="controls">
+            <label for="text-input">Text:</label>
+            <input type="text" id="text-input" value="Your Text Here">
+
+            <label for="color-picker">Color:</label>
+            <input type="color" id="color-picker" value="#00ffdd">
+
+            <label for="font-size-input">Font Size:</label>
+            <input type="number" id="font-size-input" value="120">
+
+            <label for="font-file-input">Upload Font:</label>
+            <input type="file" id="font-file-input" accept=".ttf, .otf, .woff, .woff2">
+
+            <button id="download-btn">Download Wallpaper</button>
+        </div>
+        <canvas id="wallpaper-canvas"></canvas>
+    </div>
+
+    <script>
+        // --- Canvas and Wallpaper Settings ---
+        const CANVAS_WIDTH = 1920;
+        const CANVAS_HEIGHT = 1080;
+
+        // --- Element References ---
+        const canvas = document.getElementById('wallpaper-canvas');
+        const textInput = document.getElementById('text-input');
+        const colorPicker = document.getElementById('color-picker');
+        const fontSizeInput = document.getElementById('font-size-input');
+        const fontFileInput = document.getElementById('font-file-input');
+        const downloadBtn = document.getElementById('download-btn');
+        const ctx = canvas.getContext('2d');
+
+        let customFont = 'sans-serif';
+
+        // --- Canvas Initialization ---
+        function initializeCanvas() {
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            canvas.style.width = '80vw';
+            canvas.style.height = `calc(80vw * ${CANVAS_HEIGHT / CANVAS_WIDTH})`;
+            drawCanvas();
+        }
+
+        // --- Drawing Function ---
+        function drawCanvas() {
+            // Background
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Text Styling
+            const text = textInput.value;
+            const color = colorPicker.value;
+            const fontSize = fontSizeInput.value;
+
+            ctx.fillStyle = color;
+            ctx.font = `${fontSize}px ${customFont}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Neon Effect
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 20;
+
+            // Draw Text
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            // To make the text brighter, draw it multiple times
+            ctx.shadowBlur = 10;
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            ctx.shadowBlur = 5;
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            // Reset shadow for subsequent drawings
+            ctx.shadowBlur = 0;
+        }
+
+        // --- Event Listeners ---
+        textInput.addEventListener('input', drawCanvas);
+        colorPicker.addEventListener('input', drawCanvas);
+        fontSizeInput.addEventListener('input', drawCanvas);
+
+        fontFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const font = new FontFace('custom-font', e.target.result);
+                    font.load().then((loadedFont) => {
+                        document.fonts.add(loadedFont);
+                        customFont = 'custom-font';
+                        drawCanvas();
+                    }).catch(err => console.error('Font loading failed:', err));
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'wallpaper.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // --- Initial Call ---
+        initializeCanvas();
+    </script>
+
+</body>
+</html>

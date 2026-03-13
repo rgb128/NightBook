@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainbow Neon Font Comparison Tool</title>
+    <!-- Load opentype.js library from a CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .controls-container {
+            width: 100%;
+            max-width: 900px;
+            background-color: #2b2b2b;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            margin-bottom: 30px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: center;
+        }
+        .control-item {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #555555;
+            background-color: #333333;
+            color: #ffffff;
+        }
+        #previews-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            width: 100%;
+        }
+        .preview-wrapper {
+            background-color: #2b2b2b;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0,0,0,0.4);
+        }
+        .preview-wrapper h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #00aaff;
+            word-break: break-all;
+        }
+        .preview-wrapper canvas {
+            display: block;
+            background-color: #000;
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+        }
+        .button-group {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        .preview-wrapper button {
+             padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .preview-wrapper button:hover {
+            background-color: #0056b3;
+        }
+        #initial-message {
+            color: #777;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-container">
+        <div class="controls">
+            <div class="control-item">
+                <label for="text-input">Text:</label>
+                <input type="text" id="text-input" value="#808080">
+            </div>
+            <div class="control-item">
+                <label for="font-size-input">Font Size:</label>
+                <input type="number" id="font-size-input" value="300">
+            </div>
+            <div class="control-item">
+                <label for="line-width-input">Tube Width:</label>
+                <input type="number" id="line-width-input" value="10" min="1" max="25">
+            </div>
+            <div class="control-item" style="grid-column: 1 / -1;">
+                <label for="font-file-input">Upload Fonts:</label>
+                <input type="file" id="font-file-input" accept=".ttf, .otf, .woff, .woff2" multiple>
+            </div>
+        </div>
+    </div>
+
+    <div id="previews-container">
+        <p id="initial-message">Upload one or more font files to see the previews.</p>
+    </div>
+
+    <script>
+        // --- Canvas and Wallpaper Settings ---
+        const CANVAS_WIDTH = 2560;
+        const CANVAS_HEIGHT = 1600;
+
+        // --- Element References ---
+        const textInput = document.getElementById('text-input');
+        const fontSizeInput = document.getElementById('font-size-input');
+        const lineWidthInput = document.getElementById('line-width-input');
+        const fontFileInput = document.getElementById('font-file-input');
+        const previewsContainer = document.getElementById('previews-container');
+        
+        let loadedFonts = [];
+
+        // --- Drawing Function (for a single canvas) ---
+        function drawOnCanvas(canvas, font) {
+            const ctx = canvas.getContext('2d');
+
+            // Clear canvas and set background
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!font) return;
+
+            // Get user settings
+            const text = textInput.value;
+            const fontSize = parseInt(fontSizeInput.value, 10);
+            const tubeWidth = parseInt(lineWidthInput.value, 10);
+
+            // Get the vector path from opentype.js and its precise measurements
+            const path = font.getPath(text, 0, 0, fontSize);
+            const boundingBox = path.getBoundingBox();
+            const pathWidth = boundingBox.x2 - boundingBox.x1;
+            const pathHeight = boundingBox.y2 - boundingBox.y1;
+
+            // Calculate position to perfectly center the text
+            const x = (canvas.width - pathWidth) / 2 - boundingBox.x1;
+            const y = (canvas.height - pathHeight) / 2 - boundingBox.y1;
+            
+            const centeredPath = font.getPath(text, x, y, fontSize);
+            
+            // Create the Rainbow Gradient based on the text's actual position
+            const gradient = ctx.createLinearGradient(x + boundingBox.x1, 0, x + boundingBox.x2, 0);
+            for (let i = 0; i <= 360; i += 30) {
+                 gradient.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+            }
+
+            // Create the path on the canvas context
+            ctx.beginPath();
+            centeredPath.draw(ctx);
+
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            // --- Apply improved neon effect ---
+
+            // 1. Broad, blurry white glow (The light emission)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = tubeWidth;
+            ctx.shadowColor = 'white';
+            ctx.shadowBlur = 25;
+            ctx.stroke();
+
+            // 2. The colored "tube" drawn on top of the white glow
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = tubeWidth - 2;
+            ctx.shadowBlur = 0; // No blur on the color itself
+            ctx.stroke();
+            
+            // 3. The "white hot" inner core
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = Math.max(1, tubeWidth / 5);
+            ctx.stroke();
+
+            // Reset shadow for subsequent drawings
+            ctx.shadowColor = 'transparent';
+        }
+
+        // --- Generate all previews ---
+        function generatePreviews() {
+            previewsContainer.innerHTML = ''; // Clear existing previews
+
+            if (loadedFonts.length === 0) {
+                previewsContainer.innerHTML = '<p id="initial-message">Upload one or more font files to see the previews.</p>';
+                return;
+            }
+
+            for (const fontData of loadedFonts) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'preview-wrapper';
+
+                const title = document.createElement('h3');
+                title.textContent = fontData.name;
+                wrapper.appendChild(title);
+
+                const canvas = document.createElement('canvas');
+                canvas.width = CANVAS_WIDTH;
+                canvas.height = CANVAS_HEIGHT;
+                const aspectRatio = CANVAS_HEIGHT / CANVAS_WIDTH;
+                canvas.style.width = '400px';
+                canvas.style.height = `${400 * aspectRatio}px`;
+                wrapper.appendChild(canvas);
+                
+                // Create a container for the buttons
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'button-group';
+                
+                // Create Open in New Tab button
+                const openBtn = document.createElement('button');
+                openBtn.textContent = 'Open in New Tab';
+                openBtn.addEventListener('click', () => {
+                    const imgData = canvas.toDataURL('image/png');
+                    const newTab = window.open();
+                    newTab.document.write(`<body style="margin:0; background:black;"><img src="${imgData}" style="display:block; width:100%; height:auto;"></body>`);
+                });
+                buttonGroup.appendChild(openBtn);
+
+                // Create Download button
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download';
+                downloadBtn.addEventListener('click', () => {
+                    const link = document.createElement('a');
+                    link.download = `${textInput.value}_${fontData.name}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+                buttonGroup.appendChild(downloadBtn);
+                
+                wrapper.appendChild(buttonGroup);
+                previewsContainer.appendChild(wrapper);
+
+                // Draw on the newly created canvas
+                drawOnCanvas(canvas, fontData.font);
+            }
+        }
+
+        // --- Event Listeners ---
+        const redrawAll = () => generatePreviews();
+        textInput.addEventListener('input', redrawAll);
+        fontSizeInput.addEventListener('input', redrawAll);
+        lineWidthInput.addEventListener('input', redrawAll);
+
+        fontFileInput.addEventListener('change', (event) => {
+            const files = event.target.files;
+            if (!files.length) {
+                loadedFonts = [];
+                generatePreviews();
+                return;
+            }
+
+            const fontPromises = Array.from(files).map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const font = opentype.parse(e.target.result);
+                            resolve({ name: file.name, font: font });
+                        } catch (err) {
+                            console.error(`Failed to parse ${file.name}:`, err);
+                            reject(`Could not parse ${file.name}.`);
+                        }
+                    };
+                    reader.onerror = () => reject(`Error reading ${file.name}.`);
+                    reader.readAsArrayBuffer(file);
+                });
+            });
+
+            previewsContainer.innerHTML = '<p id="initial-message">Loading fonts...</p>';
+
+            Promise.all(fontPromises)
+                .then(fonts => {
+                    loadedFonts = fonts;
+                    generatePreviews();
+                })
+                .catch(error => {
+                    alert(`An error occurred: ${error}`);
+                    loadedFonts = [];
+                    generatePreviews();
+                });
+        });
+    </script>
+</body>
+</html>

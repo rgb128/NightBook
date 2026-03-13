@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outlined Neon Text Wallpaper Generator</title>
+    <!-- Load opentype.js library from a CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            background-color: #2b2b2b;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+        canvas {
+            border: 1px solid #444444;
+            background-color: #000000;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 15px;
+            align-items: center;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #555555;
+            background-color: #333333;
+            color: #ffffff;
+        }
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            padding: 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button {
+            grid-column: 1 / -1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Outlined Neon Text Wallpaper Generator</h1>
+        <div class="controls">
+            <label for="text-input">Text:</label>
+            <input type="text" id="text-input" value="Neon">
+
+            <label for="color-picker">Color:</label>
+            <input type="color" id="color-picker" value="#ff00ff">
+
+            <label for="font-size-input">Font Size:</label>
+            <input type="number" id="font-size-input" value="250">
+            
+            <label for="line-width-input">Tube Width:</label>
+            <input type="number" id="line-width-input" value="8" min="1" max="20">
+
+            <label for="font-file-input">Upload Font:</label>
+            <input type="file" id="font-file-input" accept=".ttf, .otf, .woff, .woff2">
+
+            <button id="download-btn">Download Wallpaper</button>
+        </div>
+        <canvas id="wallpaper-canvas"></canvas>
+    </div>
+
+    <script>
+        // --- Canvas and Wallpaper Settings ---
+        const CANVAS_WIDTH = 1920;
+        const CANVAS_HEIGHT = 1080;
+
+        // --- Element References ---
+        const canvas = document.getElementById('wallpaper-canvas');
+        const textInput = document.getElementById('text-input');
+        const colorPicker = document.getElementById('color-picker');
+        const fontSizeInput = document.getElementById('font-size-input');
+        const lineWidthInput = document.getElementById('line-width-input');
+        const fontFileInput = document.getElementById('font-file-input');
+        const downloadBtn = document.getElementById('download-btn');
+        const ctx = canvas.getContext('2d');
+
+        let loadedFont = null;
+
+        // --- Utility to lighten a hex color ---
+        function lightenColor(hex, percent) {
+            hex = hex.replace(/^#/, '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const newR = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
+            const newG = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
+            const newB = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+            return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+        }
+
+        // --- Drawing Function ---
+        function drawCanvas() {
+            // Clear canvas and set background
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!loadedFont) {
+                ctx.fillStyle = '#555';
+                ctx.font = '30px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Please upload a font file to begin', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // Get user settings
+            const text = textInput.value;
+            const color = colorPicker.value;
+            const fontSize = parseInt(fontSizeInput.value, 10);
+            const tubeWidth = parseInt(lineWidthInput.value, 10);
+
+            // Get the vector path from opentype.js
+            const path = loadedFont.getPath(text, 0, 0, fontSize);
+            const boundingBox = path.getBoundingBox();
+            const pathWidth = boundingBox.x2 - boundingBox.x1;
+            const pathHeight = boundingBox.y2 - boundingBox.y1;
+
+            // Calculate position to center the text
+            const x = (canvas.width - pathWidth) / 2 - boundingBox.x1;
+            const y = (canvas.height - pathHeight) / 2 - boundingBox.y1;
+            
+            // Create a new path at the calculated centered position
+            const centeredPath = loadedFont.getPath(text, x, y, fontSize);
+            
+            // Add the vector path commands to the canvas context
+            ctx.beginPath();
+            centeredPath.draw(ctx);
+
+            // --- Apply neon strokes from back (most blurred) to front (sharpest) ---
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            // 1. Outer Glow (Fattest, most blurred)
+            ctx.strokeStyle = color;
+            ctx.lineWidth = tubeWidth + 4;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 30;
+            ctx.stroke();
+
+            // 2. Middle Glow
+            ctx.lineWidth = tubeWidth;
+            ctx.shadowBlur = 15;
+            ctx.stroke();
+
+            // 3. Inner "tube" color (the brightest part)
+            ctx.strokeStyle = lightenColor(color, 80); // A very light, almost white version
+            ctx.lineWidth = Math.max(1, tubeWidth / 2.5);
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+
+            // Reset shadow for any subsequent drawings
+            ctx.shadowColor = 'transparent';
+        }
+
+        // --- Event Listeners ---
+        textInput.addEventListener('input', drawCanvas);
+        colorPicker.addEventListener('input', drawCanvas);
+        fontSizeInput.addEventListener('input', drawCanvas);
+        lineWidthInput.addEventListener('input', drawCanvas);
+
+        fontFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        // Parse the font data using opentype.js
+                        loadedFont = opentype.parse(e.target.result);
+                        drawCanvas();
+                    } catch (err) {
+                        console.error('Font parsing failed:', err);
+                        alert('Could not parse the font file. It might be corrupted or an unsupported format.');
+                        loadedFont = null;
+                        drawCanvas();
+                    }
+                };
+                reader.onerror = () => {
+                    alert('Error reading the font file.');
+                    loadedFont = null;
+                    drawCanvas();
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'wallpaper.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // --- Initial Canvas Setup ---
+        function initializeCanvas() {
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            canvas.style.width = '80vw';
+            const aspectRatio = CANVAS_HEIGHT / CANVAS_WIDTH;
+            canvas.style.height = `calc(80vw * ${aspectRatio})`;
+            drawCanvas();
+        }
+
+        initializeCanvas();
+    </script>
+
+</body>
+</html>
